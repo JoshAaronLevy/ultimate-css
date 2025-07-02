@@ -1,6 +1,6 @@
 {
   "name": "ultimate-css",
-  "version": "1.0.1",
+  "version": "1.1.1",
   "displayName": "Ultimate CSS",
   "description": "Highlight unused, duplicate, and undefined CSS/SCSS classes across your project.",
   "publisher": "JoshLevy",

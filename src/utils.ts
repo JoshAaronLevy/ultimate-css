@@ -5,6 +5,16 @@ import postcss from 'postcss';
 import postcssScss from 'postcss-scss';
 import { CSSClass } from './models/types';
 
+function isLineIgnored(document: vscode.TextDocument, lineNumber: number): boolean {
+  const lineText = document.lineAt(lineNumber).text;
+  return lineText.includes('ultimate-css-ignore-line');
+}
+
+function isFileIgnored(document: vscode.TextDocument): boolean {
+  const firstLine = document.lineAt(0).text;
+  return firstLine.includes('ultimate-css-ignore-file');
+}
+
 export async function getAllCSSClasses(uris: vscode.Uri[]): Promise<Record<string, CSSClass[]>> {
   const classMap: Record<string, CSSClass[]> = {};
 
@@ -30,7 +40,7 @@ export async function getAllCSSClasses(uris: vscode.Uri[]): Promise<Record<strin
           new vscode.Position(line - 1, selectorStart + className.length)
         );
 
-        const blockText = rule.toString().trim(); // Capture full CSS rule
+        const blockText = rule.toString().trim();
 
         if (!classMap[uri.fsPath]) {
           classMap[uri.fsPath] = [];
@@ -63,7 +73,19 @@ export function findDuplicates(classMap: Record<string, CSSClass[]>): Record<str
 
   for (const [className, instances] of nameToInstances.entries()) {
     if (instances.length > 1) {
-      duplicates[className] = instances;
+      const filteredInstances: CSSClass[] = [];
+
+      for (const instance of instances) {
+        const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === instance.file.fsPath);
+        if (!doc) continue;
+        if (isFileIgnored(doc)) continue;
+        if (isLineIgnored(doc, instance.range.start.line)) continue;
+        filteredInstances.push(instance);
+      }
+
+      if (filteredInstances.length > 1) {
+        duplicates[className] = filteredInstances;
+      }
     }
   }
 
@@ -98,29 +120,27 @@ export async function findUnusedClasses(
   const diagnostics: { [key: string]: vscode.Diagnostic[] } = {};
 
   for (const [filePath, classes] of Object.entries(classMap)) {
+    const fileUri = vscode.Uri.file(filePath);
+    const doc = await vscode.workspace.openTextDocument(fileUri);
+
+    if (isFileIgnored(doc)) continue;
+
     for (const clsObj of classes) {
-      const cls = clsObj.name; // ✅ use correct property
+      const cls = clsObj.name;
 
+      const lineNum = clsObj.range.start.line;
       if (!usedClasses.has(cls) && !skip.has(cls)) {
-        const fileUri = vscode.Uri.file(filePath);
-        const doc = await vscode.workspace.openTextDocument(fileUri);
-        const text = doc.getText();
-        const index = text.indexOf(`.${cls}`);
+        if (isLineIgnored(doc, lineNum)) continue;
 
-        if (index !== -1) {
-          const pos = doc.positionAt(index);
-          const range = new vscode.Range(pos, pos.translate(0, cls.length + 1));
+        const diagnostic = new vscode.Diagnostic(
+          clsObj.range,
+          `Unused class: "${cls}"`,
+          vscode.DiagnosticSeverity.Warning
+        );
+        diagnostic.source = 'Ultimate CSS';
 
-          const diagnostic = new vscode.Diagnostic(
-            range,
-            `Unused class: "${cls}"`,
-            vscode.DiagnosticSeverity.Warning
-          );
-          diagnostic.source = 'Ultimate CSS';
-
-          if (!diagnostics[filePath]) diagnostics[filePath] = [];
-          diagnostics[filePath].push(diagnostic);
-        }
+        if (!diagnostics[filePath]) diagnostics[filePath] = [];
+        diagnostics[filePath].push(diagnostic);
       }
     }
   }
@@ -139,7 +159,11 @@ export async function findUndefinedClasses(
   const diagnosticsByFile: Record<string, vscode.Diagnostic[]> = {};
 
   for (const uri of codeUris) {
-    const content = await fs.readFile(uri.fsPath, 'utf-8');
+    const doc = await vscode.workspace.openTextDocument(uri);
+    const content = doc.getText();
+    const lines = content.split('\n');
+
+    if (isFileIgnored(doc)) continue;
 
     const regexList = [
       /class(Name)?\s*=\s*"([^"]+)"/g,
@@ -147,20 +171,20 @@ export async function findUndefinedClasses(
       /class(Name)?\s*=\s*\{\s*"([^"]+)"\s*\}/g
     ];
 
-    const lines = content.split('\n');
-
     for (const regex of regexList) {
       let match;
       while ((match = regex.exec(content)) !== null) {
         const allClasses = match[2]?.split(/\s+/) || match[3]?.split(/\s+/) || [];
         const index = match.index;
 
+        const before = content.slice(0, index);
+        const lineNum = before.split('\n').length - 1;
+        const col = lines[lineNum]?.indexOf(allClasses[0]) ?? 0;
+
+        if (isLineIgnored(doc, lineNum)) continue;
+
         for (const className of allClasses) {
           if (!definedClassNames.has(className)) {
-            const before = content.slice(0, index);
-            const lineNum = before.split('\n').length - 1;
-            const col = lines[lineNum].indexOf(className);
-
             const range = new vscode.Range(
               new vscode.Position(lineNum, col),
               new vscode.Position(lineNum, col + className.length)

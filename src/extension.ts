@@ -6,6 +6,7 @@ import {
 	findUndefinedClasses
 } from './utils';
 import { DuplicateClassCodeActionProvider } from './duplicateClassCodeActionProvider';
+import { IgnoreClassCodeActionProvider } from './ignoreClassCodeActionProvider';
 
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('🔥 Ultimate CSS extension activated!');
@@ -50,6 +51,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					vscode.DiagnosticSeverity.Error
 				);
 				diagnostic.source = 'Ultimate CSS';
+				diagnostic.code = 'duplicate-class';
 
 				if (!diagnosticsMap[uri.fsPath]) {
 					diagnosticsMap[uri.fsPath] = [];
@@ -59,7 +61,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 
 		for (const [filePath, diags] of Object.entries(unused)) {
-			const uri = vscode.Uri.file(filePath);
 			const existing = diagnosticsMap[filePath] ?? [];
 			diagnosticsMap[filePath] = [...existing, ...diags];
 		}
@@ -73,14 +74,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			const existing = diagnostics.get(uri) ?? [];
 			diagnostics.set(uri, [...existing, ...diags]);
 		}
-
-		context.subscriptions.push(
-			vscode.languages.registerCodeActionsProvider(
-				[{ language: 'css' }, { language: 'scss' }],
-				new DuplicateClassCodeActionProvider(duplicates),
-				{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }
-			)
-		);
 	};
 
 	updateDiagnostics();
@@ -90,4 +83,28 @@ export async function activate(context: vscode.ExtensionContext) {
 	watcher.onDidCreate(updateDiagnostics);
 	watcher.onDidDelete(updateDiagnostics);
 	context.subscriptions.push(watcher);
+
+	context.subscriptions.push(
+		vscode.languages.registerCodeActionsProvider(
+			[{ language: 'css' }, { language: 'scss' }],
+			new DuplicateClassCodeActionProvider(),
+			{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }
+		)
+	);
+
+	context.subscriptions.push(
+		vscode.languages.registerCodeActionsProvider(
+			[
+				{ language: 'css' },
+				{ language: 'scss' },
+				{ language: 'html' },
+				{ language: 'javascript' },
+				{ language: 'typescript' },
+				{ language: 'javascriptreact' },
+				{ language: 'typescriptreact' }
+			],
+			new IgnoreClassCodeActionProvider(),
+			{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }
+		)
+	);
 }

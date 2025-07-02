@@ -3,7 +3,7 @@
   "version": "1.0.1",
   "displayName": "Ultimate CSS",
   "description": "Highlight unused, duplicate, and undefined CSS/SCSS classes across your project.",
-  "publisher": "Josh Levy",
+  "publisher": "JoshLevy",
   "repository": {
     "type": "git",
     "url": "https://github.com/joshaaronlevy/ultimate-css"
@@ -61,6 +61,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
+    "build-extension": "npm run check-types && npm run lint && node esbuild.js --production",
     "compile": "npm run check-types && npm run lint && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",

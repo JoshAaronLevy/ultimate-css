@@ -18,7 +18,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		const codeFiles = await vscode.workspace.findFiles('**/*.{html,js,jsx,ts,tsx}');
 
 		const classMap = await getAllCSSClasses(cssFiles);
-		const duplicates = findDuplicates(classMap);
+		const duplicates = await findDuplicates(classMap);
 
 		const duplicateClassNames = new Set(
 			Object.values(duplicates).flat().map(d => d.name)

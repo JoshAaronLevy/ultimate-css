@@ -59,7 +59,7 @@ export async function getAllCSSClasses(uris: vscode.Uri[]): Promise<Record<strin
   return classMap;
 }
 
-export function findDuplicates(classMap: Record<string, CSSClass[]>): Record<string, CSSClass[]> {
+export async function findDuplicates(classMap: Record<string, CSSClass[]>): Promise<Record<string, CSSClass[]>> {
   const nameToInstances = new Map<string, CSSClass[]>();
   const duplicates: Record<string, CSSClass[]> = {};
 
@@ -71,25 +71,37 @@ export function findDuplicates(classMap: Record<string, CSSClass[]>): Record<str
     }
   }
 
-  for (const [className, instances] of nameToInstances.entries()) {
-    if (instances.length > 1) {
-      const filteredInstances: CSSClass[] = [];
+  const checkDuplicates = async () => {
+    for (const [className, instances] of nameToInstances.entries()) {
+      if (instances.length > 1) {
+        const filteredInstances: CSSClass[] = [];
 
-      for (const instance of instances) {
-        const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === instance.file.fsPath);
-        if (!doc) continue;
-        if (isFileIgnored(doc)) continue;
-        if (isLineIgnored(doc, instance.range.start.line)) continue;
-        filteredInstances.push(instance);
-      }
+        for (const instance of instances) {
+          let doc: vscode.TextDocument;
+          try {
+            doc = await vscode.workspace.openTextDocument(instance.file);
+          } catch {
+            continue;
+          }
 
-      if (filteredInstances.length > 1) {
-        duplicates[className] = filteredInstances;
+          if (isFileIgnored(doc)) continue;
+
+          const lineAbove = instance.range.start.line - 1;
+          if (lineAbove >= 0 && isLineIgnored(doc, lineAbove)) continue;
+
+          filteredInstances.push(instance);
+        }
+
+        if (filteredInstances.length > 1) {
+          duplicates[className] = filteredInstances;
+        }
       }
     }
-  }
 
-  return duplicates;
+    return duplicates;
+  };
+
+  return checkDuplicates() as unknown as Record<string, CSSClass[]>;
 }
 
 export async function findUnusedClasses(

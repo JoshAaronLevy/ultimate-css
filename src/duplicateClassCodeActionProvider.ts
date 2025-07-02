@@ -15,7 +15,7 @@ export class DuplicateClassCodeActionProvider implements vscode.CodeActionProvid
 
     const cssFiles = await vscode.workspace.findFiles('**/*.{css,scss}');
     const classMap = await getAllCSSClasses(cssFiles);
-    const duplicates = findDuplicates(classMap);
+    const duplicates = await findDuplicates(classMap);
 
     for (const diagnostic of context.diagnostics) {
       if (!diagnostic.message.startsWith('Duplicate class:')) continue;
@@ -38,8 +38,8 @@ export class DuplicateClassCodeActionProvider implements vscode.CodeActionProvid
           ignoreLineAction.edit = new vscode.WorkspaceEdit();
           ignoreLineAction.edit.insert(
             document.uri,
-            new vscode.Position(diagnostic.range.start.line, Number.MAX_SAFE_INTEGER),
-            ' // ultimate-css-ignore-line'
+            new vscode.Position(diagnostic.range.start.line, 0),
+            '/* ultimate-css-ignore-line */\n'
           );
           ignoreLineAction.diagnostics = [diagnostic];
 

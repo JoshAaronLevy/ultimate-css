@@ -1,5 +1,10 @@
 import * as vscode from 'vscode';
-import { getAllCSSClasses, findDuplicates, findUnusedClasses } from './utils';
+import {
+	getAllCSSClasses,
+	findDuplicates,
+	findUnusedClasses,
+	findUndefinedClasses
+} from './utils';
 
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('🔥 Ultimate CSS extension activated!');
@@ -13,6 +18,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		const classMap = await getAllCSSClasses(cssFiles);
 		const duplicates = findDuplicates(classMap);
 		const unused = await findUnusedClasses(classMap, codeFiles);
+		const undefinedClassDiagnostics = await findUndefinedClasses(classMap, codeFiles);
 
 		diagnostics.clear();
 
@@ -51,6 +57,12 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 
 			diagnostics.set(uri, fileDiagnostics);
+		}
+
+		for (const [filePath, diags] of Object.entries(undefinedClassDiagnostics)) {
+			const uri = vscode.Uri.file(filePath);
+			const existing = diagnostics.get(uri) ?? [];
+			diagnostics.set(uri, [...existing, ...diags]);
 		}
 	};
 

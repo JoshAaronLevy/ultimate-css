@@ -31,7 +31,7 @@ export async function getAllCSSClasses(uris: vscode.Uri[]): Promise<Record<strin
         const line = rule.source?.start?.line || 0;
         const col = rule.source?.start?.column || 0;
 
-        const selectorStart = col - 1 + sel.indexOf(classMatch[0]) + 1; // +1 skips the dot
+        const selectorStart = col - 1 + sel.indexOf(classMatch[0]) + 1;
         const range = new vscode.Range(
           new vscode.Position(line - 1, selectorStart),
           new vscode.Position(line - 1, selectorStart + className.length)
@@ -109,4 +109,63 @@ export async function findUnusedClasses(
   }
 
   return unused;
+}
+
+export async function findUndefinedClasses(
+  classMap: Record<string, CSSClass[]>,
+  codeUris: vscode.Uri[]
+): Promise<Record<string, vscode.Diagnostic[]>> {
+  const definedClassNames = new Set(
+    Object.values(classMap).flat().map(cls => cls.name)
+  );
+
+  const diagnosticsByFile: Record<string, vscode.Diagnostic[]> = {};
+
+  for (const uri of codeUris) {
+    const content = await fs.readFile(uri.fsPath, 'utf-8');
+
+    const regexList = [
+      /class(Name)?\s*=\s*"([^"]+)"/g,
+      /class(Name)?\s*=\s*`([^`]+)`/g,
+      /class(Name)?\s*=\s*\{\s*"([^"]+)"\s*\}/g
+    ];
+
+    const lines = content.split('\n');
+
+    for (const regex of regexList) {
+      let match;
+      while ((match = regex.exec(content)) !== null) {
+        const allClasses = match[2]?.split(/\s+/) || match[3]?.split(/\s+/) || [];
+        const index = match.index;
+
+        for (const className of allClasses) {
+          if (!definedClassNames.has(className)) {
+            // Find the line number and column
+            const before = content.slice(0, index);
+            const lineNum = before.split('\n').length - 1;
+            const col = lines[lineNum].indexOf(className);
+
+            const range = new vscode.Range(
+              new vscode.Position(lineNum, col),
+              new vscode.Position(lineNum, col + className.length)
+            );
+
+            if (!diagnosticsByFile[uri.fsPath]) {
+              diagnosticsByFile[uri.fsPath] = [];
+            }
+
+            diagnosticsByFile[uri.fsPath].push(
+              new vscode.Diagnostic(
+                range,
+                `Class "${className}" is not defined in any CSS file.`,
+                vscode.DiagnosticSeverity.Warning
+              )
+            );
+          }
+        }
+      }
+    }
+  }
+
+  return diagnosticsByFile;
 }

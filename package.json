@@ -26,6 +26,15 @@
         "command": "ultimate-css.runDiagnostics",
         "title": "Ultimate CSS: Run Diagnostics"
       }
+    ],
+    "languages": [
+      { "id": "javascript", "aliases": ["JavaScript"], "extensions": [".js"] },
+      { "id": "javascriptreact", "aliases": ["JavaScript React"], "extensions": [".jsx"] },
+      { "id": "typescript", "aliases": ["TypeScript"], "extensions": [".ts"] },
+      { "id": "typescriptreact", "aliases": ["TypeScript React"], "extensions": [".tsx"] },
+      { "id": "html", "aliases": ["HTML"], "extensions": [".html"] },
+      { "id": "css", "aliases": ["CSS"], "extensions": [".css"] },
+      { "id": "scss", "aliases": ["SCSS"], "extensions": [".scss"] }
     ]
   },
   "scripts": {

@@ -1,71 +1,71 @@
-# ultimate-css README
+# 🔥 Ultimate CSS/SCSS
 
-This is the README for your extension "ultimate-css". After writing up a brief description, we recommend including the following sections.
+The Ultimate CSS/SCSS extension helps you write cleaner, more efficient CSS/SCSS by identifying:
 
-## Features
+- ❌ **Duplicate class definitions** — Flags class names that are defined multiple times across your stylesheets.
+- ⚠️ **Unused CSS/SCSS classes** — Warns you about CSS/SCSS classes that are defined but not used anywhere.
+- ⚠️ **Undefined class usage** — Highlights any class used in your HTML/JS/JSX/TS/TSX files that isn’t defined in your CSS/SCSS.
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
-
-For example if there is an image subfolder under your extension project workspace:
-
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
-
-## Requirements
-
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
-
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+Built for modern front-end workflows with support for:
+- HTML, JS, JSX, TS, and TSX files
+- CSS and SCSS stylesheets
 
 ---
 
-## Following extension guidelines
+## 📸 Screenshots
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+### ❌ Duplicate Class Detection
+![Duplicate class detection](images/Ultimate-CSS-Duplicate-Class.png)
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+### ⚠️ Unused CSS/SCSS Class
+![Unused class warning](images/Ultimate-CSS-Unused-Class.png)
 
-## Working with Markdown
+### ⚠️ Undefined Class Usage
+![Undefined class warning](images/Ultimate-CSS-Undefined-Class.png)
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+---
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+## ✨ Features
 
-## For more information
+### 🔍 Real-Time Diagnostics
+- Underlines issues directly in your code:
+  - **Red** for duplicate class definitions
+  - **Yellow** for unused or undefined class usage
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+### 🧠 Project-Wide Analysis
+- Scans your **entire workspace** — not just open files
+- Keeps diagnostics up-to-date as you code
 
-**Enjoy!**
+### 💡 Smart Suggestions *(Coming Soon)*
+- Quick fixes for removing unused classes
+- Suggestions for renaming or merging duplicates
+
+---
+
+## 🚀 Getting Started
+
+1. Install **Ultimate CSS/SCSS** from the [VSCode Marketplace](https://marketplace.visualstudio.com/vscode).
+2. Open a project with CSS/SCSS/SCSS and HTML/JSX/TSX files.
+3. Enjoy instant insights as you code!
+
+---
+
+## ⚙️ Extension Commands
+
+| Command | Description |
+|--------|-------------|
+| `Ultimate CSS/SCSS: Run Diagnostics` | Manually triggers a full scan of your workspace |
+
+---
+
+## 🛠 Roadmap
+
+- [ ] Fix suggestions for duplicate/unused class cleanup
+- [ ] Include code actions and quick fixes
+- [ ] Performance improvements on large projects
+
+---
+
+## 📄 License
+
+MIT License

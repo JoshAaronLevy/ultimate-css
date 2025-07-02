@@ -1,6 +1,8 @@
 /* eslint-disable curly */
 import * as vscode from 'vscode';
 import { getAllCSSClasses, findDuplicates } from './utils';
+// noinspection ES6UnusedImports
+import { updateDiagnostics } from './extension';
 
 export class DuplicateClassCodeActionProvider implements vscode.CodeActionProvider {
   static readonly providedCodeActionKinds = [vscode.CodeActionKind.QuickFix];
@@ -35,25 +37,37 @@ export class DuplicateClassCodeActionProvider implements vscode.CodeActionProvid
             'Ignore duplicate for this line',
             vscode.CodeActionKind.QuickFix
           );
-          ignoreLineAction.edit = new vscode.WorkspaceEdit();
-          ignoreLineAction.edit.insert(
+          const edit1 = new vscode.WorkspaceEdit();
+          edit1.insert(
             document.uri,
             new vscode.Position(diagnostic.range.start.line, 0),
             '/* ultimate-css-ignore-line */\n'
           );
+          ignoreLineAction.edit = edit1;
           ignoreLineAction.diagnostics = [diagnostic];
+
+          // 🟢 Trigger update after edit
+          ignoreLineAction.command = {
+            title: 'Refresh diagnostics',
+            command: 'ultimate-css.refreshDiagnostics',
+          };
 
           const ignoreFileAction = new vscode.CodeAction(
             'Ignore all Ultimate CSS warnings for this file',
             vscode.CodeActionKind.QuickFix
           );
-          ignoreFileAction.edit = new vscode.WorkspaceEdit();
-          ignoreFileAction.edit.insert(
+          const edit2 = new vscode.WorkspaceEdit();
+          edit2.insert(
             document.uri,
             new vscode.Position(0, 0),
             '/* ultimate-css-ignore-file */\n'
           );
+          ignoreFileAction.edit = edit2;
           ignoreFileAction.diagnostics = [diagnostic];
+          ignoreFileAction.command = {
+            title: 'Refresh diagnostics',
+            command: 'ultimate-css.refreshDiagnostics',
+          };
 
           actions.push(ignoreLineAction, ignoreFileAction);
           continue;

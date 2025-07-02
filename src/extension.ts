@@ -8,73 +8,81 @@ import {
 import { DuplicateClassCodeActionProvider } from './duplicateClassCodeActionProvider';
 import { IgnoreClassCodeActionProvider } from './ignoreClassCodeActionProvider';
 
+let diagnostics: vscode.DiagnosticCollection;
+
+export const updateDiagnostics = async () => {
+	const cssFiles = await vscode.workspace.findFiles('**/*.{css,scss}');
+	const codeFiles = await vscode.workspace.findFiles('**/*.{html,js,jsx,ts,tsx}');
+
+	const classMap = await getAllCSSClasses(cssFiles);
+	const duplicates = await findDuplicates(classMap);
+
+	const duplicateClassNames = new Set(
+		Object.values(duplicates).flat().map(d => d.name)
+	);
+
+	const unused = await findUnusedClasses(classMap, codeFiles, duplicateClassNames);
+	const undefinedClassDiagnostics = await findUndefinedClasses(classMap, codeFiles);
+
+	diagnostics.clear();
+	const diagnosticsMap: Record<string, vscode.Diagnostic[]> = {};
+
+	for (const [className, instances] of Object.entries(duplicates)) {
+		for (const cssClass of instances) {
+			const uri = cssClass.file;
+			const range = cssClass.range;
+
+			const otherLocations = instances
+				.filter(entry => entry.file.fsPath !== uri.fsPath || entry.range.start.line !== range.start.line)
+				.map(entry => {
+					const relPath = vscode.workspace.asRelativePath(entry.file.fsPath);
+					return `${relPath}:${entry.range.start.line + 1}`;
+				})
+				.join('\n');
+
+			const message = `Duplicate class: "${className}"\nAlso defined in:\n${otherLocations}\n\n(from Ultimate CSS)`;
+
+			const diagnostic = new vscode.Diagnostic(
+				range,
+				message,
+				vscode.DiagnosticSeverity.Error
+			);
+			diagnostic.source = 'Ultimate CSS';
+			diagnostic.code = 'duplicate-class';
+
+			if (!diagnosticsMap[uri.fsPath]) {
+				diagnosticsMap[uri.fsPath] = [];
+			}
+			diagnosticsMap[uri.fsPath].push(diagnostic);
+		}
+	}
+
+	for (const [filePath, diags] of Object.entries(unused)) {
+		const existing = diagnosticsMap[filePath] ?? [];
+		diagnosticsMap[filePath] = [...existing, ...diags];
+	}
+
+	for (const [filePath, diags] of Object.entries(diagnosticsMap)) {
+		diagnostics.set(vscode.Uri.file(filePath), diags);
+	}
+
+	for (const [filePath, diags] of Object.entries(undefinedClassDiagnostics)) {
+		const uri = vscode.Uri.file(filePath);
+		const existing = diagnostics.get(uri) ?? [];
+		diagnostics.set(uri, [...existing, ...diags]);
+	}
+};
+
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('🔥 Ultimate CSS extension activated!');
-	const diagnostics = vscode.languages.createDiagnosticCollection('ultimate-css');
+	diagnostics = vscode.languages.createDiagnosticCollection('ultimate-css');
 	context.subscriptions.push(diagnostics);
 
-	const updateDiagnostics = async () => {
-		const cssFiles = await vscode.workspace.findFiles('**/*.{css,scss}');
-		const codeFiles = await vscode.workspace.findFiles('**/*.{html,js,jsx,ts,tsx}');
-
-		const classMap = await getAllCSSClasses(cssFiles);
-		const duplicates = await findDuplicates(classMap);
-
-		const duplicateClassNames = new Set(
-			Object.values(duplicates).flat().map(d => d.name)
-		);
-
-		const unused = await findUnusedClasses(classMap, codeFiles, duplicateClassNames);
-		const undefinedClassDiagnostics = await findUndefinedClasses(classMap, codeFiles);
-
-		diagnostics.clear();
-		const diagnosticsMap: Record<string, vscode.Diagnostic[]> = {};
-
-		for (const [className, instances] of Object.entries(duplicates)) {
-			for (const cssClass of instances) {
-				const uri = cssClass.file;
-				const range = cssClass.range;
-
-				const otherLocations = instances
-					.filter(entry => entry.file.fsPath !== uri.fsPath || entry.range.start.line !== range.start.line)
-					.map(entry => {
-						const relPath = vscode.workspace.asRelativePath(entry.file.fsPath);
-						return `${relPath}:${entry.range.start.line + 1}`;
-					})
-					.join('\n');
-
-				const message = `Duplicate class: "${className}"\nAlso defined in:\n${otherLocations}\n\n(from Ultimate CSS)`;
-
-				const diagnostic = new vscode.Diagnostic(
-					range,
-					message,
-					vscode.DiagnosticSeverity.Error
-				);
-				diagnostic.source = 'Ultimate CSS';
-				diagnostic.code = 'duplicate-class';
-
-				if (!diagnosticsMap[uri.fsPath]) {
-					diagnosticsMap[uri.fsPath] = [];
-				}
-				diagnosticsMap[uri.fsPath].push(diagnostic);
-			}
-		}
-
-		for (const [filePath, diags] of Object.entries(unused)) {
-			const existing = diagnosticsMap[filePath] ?? [];
-			diagnosticsMap[filePath] = [...existing, ...diags];
-		}
-
-		for (const [filePath, diags] of Object.entries(diagnosticsMap)) {
-			diagnostics.set(vscode.Uri.file(filePath), diags);
-		}
-
-		for (const [filePath, diags] of Object.entries(undefinedClassDiagnostics)) {
-			const uri = vscode.Uri.file(filePath);
-			const existing = diagnostics.get(uri) ?? [];
-			diagnostics.set(uri, [...existing, ...diags]);
-		}
-	};
+	context.subscriptions.push(
+		vscode.commands.registerCommand('ultimate-css.refreshDiagnostics', () => {
+			setTimeout(() => updateDiagnostics(), 100);
+		})
+	);
 
 	updateDiagnostics();
 
@@ -107,4 +115,4 @@ export async function activate(context: vscode.ExtensionContext) {
 			{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }
 		)
 	);
-}
+};

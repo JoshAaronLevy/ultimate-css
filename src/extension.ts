@@ -5,6 +5,7 @@ import {
 	findUnusedClasses,
 	findUndefinedClasses
 } from './utils';
+import { DuplicateClassCodeActionProvider } from './duplicateClassCodeActionProvider';
 
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('🔥 Ultimate CSS extension activated!');
@@ -17,46 +18,54 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		const classMap = await getAllCSSClasses(cssFiles);
 		const duplicates = findDuplicates(classMap);
-		const unused = await findUnusedClasses(classMap, codeFiles);
+
+		const duplicateClassNames = new Set(
+			Object.values(duplicates).flat().map(d => d.name)
+		);
+
+		const unused = await findUnusedClasses(classMap, codeFiles, duplicateClassNames);
 		const undefinedClassDiagnostics = await findUndefinedClasses(classMap, codeFiles);
 
 		diagnostics.clear();
+		const diagnosticsMap: Record<string, vscode.Diagnostic[]> = {};
 
-		for (const [filePath, classList] of Object.entries(classMap)) {
-			const uri = vscode.Uri.file(filePath);
-			const fileDiagnostics: vscode.Diagnostic[] = [];
+		for (const [className, instances] of Object.entries(duplicates)) {
+			for (const cssClass of instances) {
+				const uri = cssClass.file;
+				const range = cssClass.range;
 
-			for (const cssClass of classList) {
-				const isDuplicate = Object.values(duplicates)
-					.flat()
-					.some(c => c.name === cssClass.name && c.file.fsPath !== cssClass.file.fsPath);
+				const otherLocations = instances
+					.filter(entry => entry.file.fsPath !== uri.fsPath || entry.range.start.line !== range.start.line)
+					.map(entry => {
+						const relPath = vscode.workspace.asRelativePath(entry.file.fsPath);
+						return `${relPath}:${entry.range.start.line + 1}`;
+					})
+					.join('\n');
 
-				if (isDuplicate) {
-					fileDiagnostics.push(
-						new vscode.Diagnostic(
-							cssClass.range,
-							`Duplicate class: "${cssClass.name}"`,
-							vscode.DiagnosticSeverity.Error
-						)
-					);
-				}
+				const message = `Duplicate class: "${className}"\nAlso defined in:\n${otherLocations}\n\n(from Ultimate CSS)`;
 
-				const isUnused = !isDuplicate && unused.some(
-					u => u.name === cssClass.name && u.file.fsPath === cssClass.file.fsPath
+				const diagnostic = new vscode.Diagnostic(
+					range,
+					message,
+					vscode.DiagnosticSeverity.Error
 				);
+				diagnostic.source = 'Ultimate CSS';
 
-				if (isUnused) {
-					fileDiagnostics.push(
-						new vscode.Diagnostic(
-							cssClass.range,
-							`Unused class: "${cssClass.name}"`,
-							vscode.DiagnosticSeverity.Warning
-						)
-					);
+				if (!diagnosticsMap[uri.fsPath]) {
+					diagnosticsMap[uri.fsPath] = [];
 				}
+				diagnosticsMap[uri.fsPath].push(diagnostic);
 			}
+		}
 
-			diagnostics.set(uri, fileDiagnostics);
+		for (const [filePath, diags] of Object.entries(unused)) {
+			const uri = vscode.Uri.file(filePath);
+			const existing = diagnosticsMap[filePath] ?? [];
+			diagnosticsMap[filePath] = [...existing, ...diags];
+		}
+
+		for (const [filePath, diags] of Object.entries(diagnosticsMap)) {
+			diagnostics.set(vscode.Uri.file(filePath), diags);
 		}
 
 		for (const [filePath, diags] of Object.entries(undefinedClassDiagnostics)) {
@@ -64,13 +73,15 @@ export async function activate(context: vscode.ExtensionContext) {
 			const existing = diagnostics.get(uri) ?? [];
 			diagnostics.set(uri, [...existing, ...diags]);
 		}
-	};
 
-	context.subscriptions.push(
-		vscode.commands.registerCommand('ultimate-css.runDiagnostics', () => {
-			updateDiagnostics();
-		})
-	);
+		context.subscriptions.push(
+			vscode.languages.registerCodeActionsProvider(
+				[{ language: 'css' }, { language: 'scss' }],
+				new DuplicateClassCodeActionProvider(duplicates),
+				{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }
+			)
+		);
+	};
 
 	updateDiagnostics();
 

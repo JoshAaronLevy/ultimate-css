@@ -1,7 +1,6 @@
 /* eslint-disable curly */
 import * as vscode from 'vscode';
 import { getAllCSSClasses, findDuplicates } from './utils';
-// noinspection ES6UnusedImports
 import { updateDiagnostics } from './extension';
 
 export class DuplicateClassCodeActionProvider implements vscode.CodeActionProvider {
@@ -33,24 +32,6 @@ export class DuplicateClassCodeActionProvider implements vscode.CodeActionProvid
           instance.file.fsPath === document.uri.fsPath &&
           instance.range.start.line === diagnostic.range.start.line
         ) {
-          const ignoreLineAction = new vscode.CodeAction(
-            'Ignore duplicate for this line',
-            vscode.CodeActionKind.QuickFix
-          );
-          const edit1 = new vscode.WorkspaceEdit();
-          edit1.insert(
-            document.uri,
-            new vscode.Position(diagnostic.range.start.line, 0),
-            '/* ultimate-css-ignore-line */\n'
-          );
-          ignoreLineAction.edit = edit1;
-          ignoreLineAction.diagnostics = [diagnostic];
-
-          // 🟢 Trigger update after edit
-          ignoreLineAction.command = {
-            title: 'Refresh diagnostics',
-            command: 'ultimate-css.refreshDiagnostics',
-          };
 
           const ignoreFileAction = new vscode.CodeAction(
             'Ignore all Ultimate CSS warnings for this file',
@@ -65,11 +46,12 @@ export class DuplicateClassCodeActionProvider implements vscode.CodeActionProvid
           ignoreFileAction.edit = edit2;
           ignoreFileAction.diagnostics = [diagnostic];
           ignoreFileAction.command = {
-            title: 'Refresh diagnostics',
-            command: 'ultimate-css.refreshDiagnostics',
+            title: 'Apply ignore and refresh',
+            command: 'ultimate-css.applyIgnoreAndRefresh',
+            arguments: [document.uri]
           };
 
-          actions.push(ignoreLineAction, ignoreFileAction);
+          actions.push(ignoreFileAction);
           continue;
         }
 

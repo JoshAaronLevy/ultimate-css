@@ -84,6 +84,15 @@ export async function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
+	context.subscriptions.push(
+		vscode.commands.registerCommand('ultimate-css.applyIgnoreAndRefresh', async (uri: vscode.Uri) => {
+			const doc = await vscode.workspace.openTextDocument(uri);
+			await vscode.window.showTextDocument(doc, { preview: true, preserveFocus: true });
+
+			setTimeout(() => updateDiagnostics(), 100);
+		})
+	);
+
 	updateDiagnostics();
 
 	const watcher = vscode.workspace.createFileSystemWatcher('**/*.{css,scss,html,js,jsx,ts,tsx}');

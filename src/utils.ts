@@ -18,153 +18,138 @@ export async function getAllCSSClasses(uris: vscode.Uri[]): Promise<Record<strin
   const classMap: Record<string, CSSClass[]> = {};
 
   for (const uri of uris) {
-    if (!uri.fsPath.endsWith('.css')) {
-      console.warn(`[Ultimate CSS] Skipping non-CSS file: ${uri.fsPath}`);
-      continue;
-    }
+    if (!uri.fsPath.endsWith('.css')) continue;
 
     try {
       const content = await fs.readFile(uri.fsPath, 'utf-8');
       const root = postcss().process(content, { from: undefined }).root;
 
-      let classCount = 0;
       root.walkRules(rule => {
-        const selectors = rule.selector?.split(',') || [];
+        // ✅ Skip anything inside @keyframes
+        if (rule.parent?.type === 'atrule' && rule.parent.name === 'keyframes') return;
 
-        for (const sel of selectors) {
-          const trimmed = sel.trim();
-          const classMatch = trimmed.match(/^\.([\w-]+)/);
-          if (!classMatch) continue;
+        // ✅ Only include rules with .class selectors
+        const selectors = rule.selector?.split(',').map(s => s.trim()).filter(Boolean) || [];
+        if (selectors.length === 0 || !selectors.every(sel => sel.startsWith('.'))) return;
 
-          const className = classMatch[1];
-          const line = rule.source?.start?.line || 0;
-          const col = rule.source?.start?.column || 0;
+        const compositeSelector = selectors.sort().join(',');
 
-          const selectorStart = col - 1 + sel.indexOf(classMatch[0]) + 1;
-          const range = new vscode.Range(
-            new vscode.Position(line - 1, selectorStart),
-            new vscode.Position(line - 1, selectorStart + className.length)
-          );
-
-          const blockText = rule.toString().trim();
-
-          if (!classMap[uri.fsPath]) {
-            classMap[uri.fsPath] = [];
+        let current: any = rule;
+        let mediaQuery: string | null = null;
+        while (current?.parent) {
+          if (current.parent.type === 'atrule' && current.parent.name === 'media') {
+            mediaQuery = `@media ${current.parent.params}`;
+            break;
           }
+          current = current.parent;
+        }
 
+        const blockStart = rule.source?.start?.line || 0;
+        const blockEnd = rule.source?.end?.line || 0;
+
+        const range = new vscode.Range(
+          new vscode.Position(blockStart - 1, 0),
+          new vscode.Position(blockEnd - 1, 1000)
+        );
+
+        const ruleId = `${uri.fsPath}-${blockStart}-${blockEnd}`;
+
+        if (!classMap[uri.fsPath]) {
+          classMap[uri.fsPath] = [];
+        }
+
+        const alreadySeen = classMap[uri.fsPath].some(c =>
+          c.name === compositeSelector &&
+          c.range.start.line === range.start.line &&
+          c.range.end.line === range.end.line
+        );
+
+        if (!alreadySeen) {
           classMap[uri.fsPath].push({
-            name: className,
+            name: compositeSelector,
             file: uri,
             range,
-            blockText
-          });
-          classCount++;
+            mediaQuery,
+            selector: compositeSelector,
+            ruleId
+          } as any);
         }
-      });
-
-      console.log(`[Ultimate CSS] ${uri.fsPath} → found ${classCount} classes`);
-    } catch (error: any) {
-      console.warn(`[Ultimate CSS] Skipped file ${uri.fsPath} due to parse error:`, error.message);
+      });      
+    } catch (err) {
+      console.error(`[Ultimate CSS] Failed to parse ${uri.fsPath}:`, err);
     }
   }
 
   return classMap;
 }
 
-export async function findDuplicates(classMap: Record<string, CSSClass[]>): Promise<Record<string, CSSClass[]>> {
-  const nameToInstances = new Map<string, CSSClass[]>();
-  const duplicates: Record<string, CSSClass[]> = {};
+export function findDuplicates(classMap: Record<string, CSSClass[]>): Record<string, CSSClass[]> {
+  const seen: Record<string, CSSClass[]> = {};
 
-  for (const entries of Object.values(classMap)) {
-    for (const cssClass of entries) {
-      const existing = nameToInstances.get(cssClass.name) || [];
-      existing.push(cssClass);
-      nameToInstances.set(cssClass.name, existing);
+  for (const file in classMap) {
+    for (const cssClass of classMap[file]) {
+      const key = `${cssClass.name}__media:${cssClass.mediaQuery ?? 'none'}`;
+      if (!seen[key]) {
+        seen[key] = [];
+      }
+      seen[key].push(cssClass);
     }
   }
 
-  const checkDuplicates = async () => {
-    for (const [className, instances] of nameToInstances.entries()) {
-      if (instances.length > 1) {
-        const filteredInstances: CSSClass[] = [];
-
-        for (const instance of instances) {
-          let doc: vscode.TextDocument;
-          try {
-            doc = await vscode.workspace.openTextDocument(instance.file);
-          } catch {
-            continue;
-          }
-
-          if (isFileIgnored(doc)) continue;
-
-          const lineAbove = instance.range.start.line - 1;
-          if (lineAbove >= 0 && isLineIgnored(doc, lineAbove)) continue;
-
-          filteredInstances.push(instance);
-        }
-
-        if (filteredInstances.length > 1) {
-          duplicates[className] = filteredInstances;
-        }
-      }
+  const duplicates: Record<string, CSSClass[]> = {};
+  for (const [key, instances] of Object.entries(seen)) {
+    if (instances.length > 1) {
+      const compositeSelector = key.split('__media:')[0];
+      duplicates[compositeSelector] = instances;
     }
+  }
 
-    return duplicates;
-  };
-
-  return checkDuplicates() as unknown as Record<string, CSSClass[]>;
+  return duplicates;
 }
 
 export async function findUnusedClasses(
   classMap: Record<string, CSSClass[]>,
-  codeFiles: vscode.Uri[],
-  skip: Set<string> = new Set()
-) {
+  codeUris: vscode.Uri[],
+  skip: Set<string>
+): Promise<Record<string, vscode.Diagnostic[]>> {
   const usedClasses = new Set<string>();
 
-  for (const file of codeFiles) {
-    const doc = await vscode.workspace.openTextDocument(file);
-    const text = doc.getText();
-    const matches = text.match(/class(Name)?=["'`{][^"'`}]+["'`}]?/g);
+  for (const uri of codeUris) {
+    const content = await fs.readFile(uri.fsPath, 'utf-8');
+    const matches = [...content.matchAll(/class(Name)?=["'`]{1}([^"'`]+)["'`]{1}/g)];
 
-    if (matches) {
-      for (const match of matches) {
-        const classes = match
-          .replace(/class(Name)?=["'`{]/, '')
-          .replace(/["'`}]/, '')
-          .split(/\s+/);
-        for (const cls of classes) {
-          usedClasses.add(cls.trim());
-        }
-      }
+    for (const match of matches) {
+      const classes = match[2].split(/\s+/);
+      for (const cls of classes) usedClasses.add(cls.trim());
     }
   }
 
-  const diagnostics: { [key: string]: vscode.Diagnostic[] } = {};
+  const diagnostics: Record<string, vscode.Diagnostic[]> = {};
 
-  for (const [filePath, classes] of Object.entries(classMap)) {
+  for (const [filePath, classInstances] of Object.entries(classMap)) {
     const fileUri = vscode.Uri.file(filePath);
     const doc = await vscode.workspace.openTextDocument(fileUri);
-
     if (isFileIgnored(doc)) continue;
 
-    for (const clsObj of classes) {
-      const cls = clsObj.name;
+    for (const cls of classInstances) {
+      const selectorParts = cls.name.split(','); // split composite
+      const line = cls.range.start.line;
 
-      const lineNum = clsObj.range.start.line;
-      if (!usedClasses.has(cls) && !skip.has(cls)) {
-        if (isLineIgnored(doc, lineNum)) continue;
+      for (const part of selectorParts) {
+        const className = part.replace(/^\./, '').trim();
+        if (!usedClasses.has(className) && !skip.has(className)) {
+          if (isLineIgnored(doc, line)) continue;
 
-        const diagnostic = new vscode.Diagnostic(
-          clsObj.range,
-          `Unused class: "${cls}"`,
-          vscode.DiagnosticSeverity.Warning
-        );
-        diagnostic.source = 'Ultimate CSS';
+          const diagnostic = new vscode.Diagnostic(
+            cls.range,
+            `Unused class: "${className}"`,
+            vscode.DiagnosticSeverity.Warning
+          );
+          diagnostic.source = 'Ultimate CSS';
 
-        if (!diagnostics[filePath]) diagnostics[filePath] = [];
-        diagnostics[filePath].push(diagnostic);
+          if (!diagnostics[filePath]) diagnostics[filePath] = [];
+          diagnostics[filePath].push(diagnostic);
+        }
       }
     }
   }
@@ -176,18 +161,20 @@ export async function findUndefinedClasses(
   classMap: Record<string, CSSClass[]>,
   codeUris: vscode.Uri[]
 ): Promise<Record<string, vscode.Diagnostic[]>> {
-  const definedClassNames = new Set(
-    Object.values(classMap).flat().map(cls => cls.name)
-  );
+  const definedClassParts = new Set<string>();
+  for (const classGroup of Object.values(classMap).flat()) {
+    const parts = classGroup.name.split(',').map(s => s.replace(/^\./, '').trim());
+    parts.forEach(p => definedClassParts.add(p));
+  }
 
   const diagnosticsByFile: Record<string, vscode.Diagnostic[]> = {};
 
   for (const uri of codeUris) {
     const doc = await vscode.workspace.openTextDocument(uri);
+    if (isFileIgnored(doc)) continue;
+
     const content = doc.getText();
     const lines = content.split('\n');
-
-    if (isFileIgnored(doc)) continue;
 
     const regexList = [
       /class(Name)?\s*=\s*"([^"]+)"/g,
@@ -198,25 +185,22 @@ export async function findUndefinedClasses(
     for (const regex of regexList) {
       let match;
       while ((match = regex.exec(content)) !== null) {
-        const allClasses = match[2]?.split(/\s+/) || match[3]?.split(/\s+/) || [];
+        const classList = match[2]?.split(/\s+/) || match[3]?.split(/\s+/) || [];
         const index = match.index;
-
         const before = content.slice(0, index);
-        const lineNum = before.split('\n').length - 1;
-        const col = lines[lineNum]?.indexOf(allClasses[0]) ?? 0;
+        const line = before.split('\n').length - 1;
+        const col = lines[line]?.indexOf(classList[0]) ?? 0;
 
-        if (isLineIgnored(doc, lineNum)) continue;
+        if (isLineIgnored(doc, line)) continue;
 
-        for (const className of allClasses) {
-          if (!definedClassNames.has(className)) {
+        for (const className of classList) {
+          if (!definedClassParts.has(className)) {
             const range = new vscode.Range(
-              new vscode.Position(lineNum, col),
-              new vscode.Position(lineNum, col + className.length)
+              new vscode.Position(line, col),
+              new vscode.Position(line, col + className.length)
             );
 
-            if (!diagnosticsByFile[uri.fsPath]) {
-              diagnosticsByFile[uri.fsPath] = [];
-            }
+            if (!diagnosticsByFile[uri.fsPath]) diagnosticsByFile[uri.fsPath] = [];
 
             diagnosticsByFile[uri.fsPath].push(
               new vscode.Diagnostic(

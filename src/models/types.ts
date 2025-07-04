@@ -4,5 +4,9 @@ export interface CSSClass {
   name: string;
   file: vscode.Uri;
   range: vscode.Range;
-  blockText: string;
+  blockText?: string;
+  position?: vscode.Position;
+  inMediaQuery?: boolean;
+  mediaQuery?: string | null;
+  selector?: string;
 };

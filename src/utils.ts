@@ -2,7 +2,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import postcss from 'postcss';
-import postcssScss from 'postcss-scss';
 import { CSSClass } from './models/types';
 
 function isLineIgnored(document: vscode.TextDocument, lineNumber: number): boolean {
@@ -19,41 +18,54 @@ export async function getAllCSSClasses(uris: vscode.Uri[]): Promise<Record<strin
   const classMap: Record<string, CSSClass[]> = {};
 
   for (const uri of uris) {
-    const content = await fs.readFile(uri.fsPath, 'utf-8');
-    const root = postcss().process(content, { syntax: postcssScss }).root;
+    if (!uri.fsPath.endsWith('.css')) {
+      console.warn(`[Ultimate CSS] Skipping non-CSS file: ${uri.fsPath}`);
+      continue;
+    }
 
-    root.walkRules(rule => {
-      const selectors = rule.selector?.split(',') || [];
+    try {
+      const content = await fs.readFile(uri.fsPath, 'utf-8');
+      const root = postcss().process(content, { from: undefined }).root;
 
-      for (const sel of selectors) {
-        const trimmed = sel.trim();
-        const classMatch = trimmed.match(/^\.([\w-]+)/);
-        if (!classMatch) continue;
+      let classCount = 0;
+      root.walkRules(rule => {
+        const selectors = rule.selector?.split(',') || [];
 
-        const className = classMatch[1];
-        const line = rule.source?.start?.line || 0;
-        const col = rule.source?.start?.column || 0;
+        for (const sel of selectors) {
+          const trimmed = sel.trim();
+          const classMatch = trimmed.match(/^\.([\w-]+)/);
+          if (!classMatch) continue;
 
-        const selectorStart = col - 1 + sel.indexOf(classMatch[0]) + 1;
-        const range = new vscode.Range(
-          new vscode.Position(line - 1, selectorStart),
-          new vscode.Position(line - 1, selectorStart + className.length)
-        );
+          const className = classMatch[1];
+          const line = rule.source?.start?.line || 0;
+          const col = rule.source?.start?.column || 0;
 
-        const blockText = rule.toString().trim();
+          const selectorStart = col - 1 + sel.indexOf(classMatch[0]) + 1;
+          const range = new vscode.Range(
+            new vscode.Position(line - 1, selectorStart),
+            new vscode.Position(line - 1, selectorStart + className.length)
+          );
 
-        if (!classMap[uri.fsPath]) {
-          classMap[uri.fsPath] = [];
+          const blockText = rule.toString().trim();
+
+          if (!classMap[uri.fsPath]) {
+            classMap[uri.fsPath] = [];
+          }
+
+          classMap[uri.fsPath].push({
+            name: className,
+            file: uri,
+            range,
+            blockText
+          });
+          classCount++;
         }
+      });
 
-        classMap[uri.fsPath].push({
-          name: className,
-          file: uri,
-          range,
-          blockText
-        });
-      }
-    });
+      console.log(`[Ultimate CSS] ${uri.fsPath} → found ${classCount} classes`);
+    } catch (error: any) {
+      console.warn(`[Ultimate CSS] Skipped file ${uri.fsPath} due to parse error:`, error.message);
+    }
   }
 
   return classMap;

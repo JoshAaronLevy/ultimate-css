@@ -1,14 +1,12 @@
-# 🔥 Ultimate CSS/SCSS
+# 🔥 Ultimate CSS
 
-The Ultimate CSS/SCSS extension helps you write cleaner, more efficient CSS/SCSS by identifying:
+The **Ultimate CSS** extension helps you write cleaner, more efficient styles by identifying:
 
 - ❌ **Duplicate class definitions** — Flags class names that are defined multiple times across your stylesheets.
-- ⚠️ **Unused CSS/SCSS classes** — Warns you about CSS/SCSS classes that are defined but not used anywhere.
-- ⚠️ **Undefined class usage** — Highlights any class used in your HTML/JS/JSX/TS/TSX files that isn’t defined in your CSS/SCSS.
+- ⚠️ **Unused CSS classes** — Warns you about CSS classes that are defined but not used anywhere.
+- ⚠️ **Undefined class usage** — Highlights any class used in your HTML/JS/JSX/TS/TSX files that isn’t defined in your CSS.
 
-Built for modern front-end workflows with support for:
-- HTML, JS, JSX, TS, and TSX files
-- CSS and SCSS stylesheets
+> ⚠️ **Note:** SCSS support is coming soon! This version focuses on stable and accurate diagnostics for standard CSS files.
 
 ---
 
@@ -17,7 +15,7 @@ Built for modern front-end workflows with support for:
 ### ❌ Duplicate Class Detection
 ![Duplicate class detection](images/Ultimate-CSS-Duplicate-Class.png)
 
-### ⚠️ Unused CSS/SCSS Class
+### ⚠️ Unused CSS Class
 ![Unused class warning](images/Ultimate-CSS-Unused-Class.png)
 
 ### ⚠️ Undefined Class Usage
@@ -44,9 +42,9 @@ Built for modern front-end workflows with support for:
 
 ## 🚀 Getting Started
 
-1. Install **Ultimate CSS/SCSS** from the [VSCode Marketplace](https://marketplace.visualstudio.com/vscode).
-2. Open a project with CSS/SCSS/SCSS and HTML/JSX/TSX files.
-3. Enjoy instant insights as you code!
+1. Install **Ultimate CSS** from the [VSCode Marketplace](https://marketplace.visualstudio.com/vscode).
+2. Open a project with CSS and HTML/JS/TS/JSX/TSX files.
+3. Start coding — the extension will automatically highlight issues across your styles.
 
 ---
 
@@ -54,18 +52,25 @@ Built for modern front-end workflows with support for:
 
 | Command | Description |
 |--------|-------------|
-| `Ultimate CSS/SCSS: Run Diagnostics` | Manually triggers a full scan of your workspace |
+| `Ultimate CSS: Run Diagnostics` | Manually triggers a full scan of your workspace |
 
 ---
 
 ## 🛠 Roadmap
 
-- [ ] Fix suggestions for duplicate/unused class cleanup
-- [ ] Include code actions and quick fixes
-- [ ] Performance improvements on large projects
+- [ ] Reintroduce full SCSS support (with safer parsing)
+- [ ] Add quick fixes for unused/duplicate classes
+- [ ] Improve performance for large monorepos
+- [ ] Configurable ignore rules or `.ultimatecssrc`
 
 ---
 
 ## 📄 License
 
-MIT License
+This extension is licensed under the [MIT License](./LICENSE).
+
+---
+
+## 💬 Feedback or Ideas?
+
+Have a feature suggestion or bug to report? Visit the [GitHub Repo](https://github.com/JoshAaronLevy/impostercoding) and open an issue. Your feedback helps make this better!

@@ -1,6 +1,6 @@
 {
   "name": "ultimate-css",
-  "version": "1.1.1",
+  "version": "1.1.3",
   "displayName": "Ultimate CSS",
   "description": "Highlight unused, duplicate, and undefined CSS/SCSS classes across your project.",
   "publisher": "JoshLevy",
@@ -8,6 +8,7 @@
     "type": "git",
     "url": "https://github.com/joshaaronlevy/ultimate-css"
   },
+  "license": "MIT",
   "engines": {
     "vscode": "^1.101.0"
   },

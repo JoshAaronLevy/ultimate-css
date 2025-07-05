@@ -4,6 +4,11 @@ import * as fs from 'fs/promises';
 import postcss from 'postcss';
 import { CSSClass } from './models/types';
 
+const IGNORED_DEFINED_CLASS_PATTERNS: (string | RegExp)[] = [
+  /^fa[srbld]$/,
+  /^fa-/
+];
+
 function isLineIgnored(document: vscode.TextDocument, lineNumber: number): boolean {
   const lineText = document.lineAt(lineNumber).text;
   return lineText.includes('ultimate-css-ignore-line');
@@ -12,6 +17,13 @@ function isLineIgnored(document: vscode.TextDocument, lineNumber: number): boole
 function isFileIgnored(document: vscode.TextDocument): boolean {
   const firstLine = document.lineAt(0).text;
   return firstLine.includes('ultimate-css-ignore-file');
+}
+
+function stripPseudoSelectorsAndDot(selector: string): string {
+  return selector
+    .replace(/^\./, '')
+    .replace(/:[:]?[\w()-]+/g, '')
+    .trim();
 }
 
 export async function getAllCSSClasses(uris: vscode.Uri[]): Promise<Record<string, CSSClass[]>> {
@@ -25,14 +37,24 @@ export async function getAllCSSClasses(uris: vscode.Uri[]): Promise<Record<strin
       const root = postcss().process(content, { from: undefined }).root;
 
       root.walkRules(rule => {
-        // ✅ Skip anything inside @keyframes
         if (rule.parent?.type === 'atrule' && rule.parent.name === 'keyframes') return;
 
-        // ✅ Only include rules with .class selectors
         const selectors = rule.selector?.split(',').map(s => s.trim()).filter(Boolean) || [];
-        if (selectors.length === 0 || !selectors.every(sel => sel.startsWith('.'))) return;
+        if (selectors.length === 0 || !selectors.every(sel => sel.includes('.'))) return;
 
         const compositeSelector = selectors.sort().join(',');
+
+        const cleanedSelector = selectors
+          .map(sel =>
+            sel
+              .split(/\s+/)
+              .map(part => stripPseudoSelectorsAndDot(part))
+              .filter(Boolean)
+              .map(name => `.${name}`)
+              .join(' ')
+          )
+          .sort()
+          .join(',');
 
         let current: any = rule;
         let mediaQuery: string | null = null;
@@ -59,22 +81,22 @@ export async function getAllCSSClasses(uris: vscode.Uri[]): Promise<Record<strin
         }
 
         const alreadySeen = classMap[uri.fsPath].some(c =>
-          c.name === compositeSelector &&
+          c.name === cleanedSelector &&
           c.range.start.line === range.start.line &&
           c.range.end.line === range.end.line
         );
 
         if (!alreadySeen) {
           classMap[uri.fsPath].push({
-            name: compositeSelector,
+            name: cleanedSelector,
             file: uri,
             range,
             mediaQuery,
             selector: compositeSelector,
             ruleId
-          } as any);
+          } as CSSClass);
         }
-      });      
+      });
     } catch (err) {
       console.error(`[Ultimate CSS] Failed to parse ${uri.fsPath}:`, err);
     }
@@ -84,23 +106,24 @@ export async function getAllCSSClasses(uris: vscode.Uri[]): Promise<Record<strin
 }
 
 export function findDuplicates(classMap: Record<string, CSSClass[]>): Record<string, CSSClass[]> {
-  const seen: Record<string, CSSClass[]> = {};
+  const selectorMap = new Map<string, CSSClass[]>();
 
   for (const file in classMap) {
     for (const cssClass of classMap[file]) {
-      const key = `${cssClass.name}__media:${cssClass.mediaQuery ?? 'none'}`;
-      if (!seen[key]) {
-        seen[key] = [];
+      const key = `${cssClass.selector}__media:${cssClass.mediaQuery ?? 'none'}`; // use original selector!
+      if (!selectorMap.has(key)) {
+        selectorMap.set(key, []);
       }
-      seen[key].push(cssClass);
+      selectorMap.get(key)!.push(cssClass);
     }
   }
 
   const duplicates: Record<string, CSSClass[]> = {};
-  for (const [key, instances] of Object.entries(seen)) {
-    if (instances.length > 1) {
-      const compositeSelector = key.split('__media:')[0];
-      duplicates[compositeSelector] = instances;
+  for (const [key, entries] of selectorMap.entries()) {
+    const uniqueByLocation = new Set(entries.map(e => `${e.file.fsPath}:${e.range.start.line}-${e.range.end.line}`));
+    if (uniqueByLocation.size > 1) {
+      const selector = key.split('__media:')[0];
+      duplicates[selector] = entries;
     }
   }
 
@@ -116,11 +139,37 @@ export async function findUnusedClasses(
 
   for (const uri of codeUris) {
     const content = await fs.readFile(uri.fsPath, 'utf-8');
-    const matches = [...content.matchAll(/class(Name)?=["'`]{1}([^"'`]+)["'`]{1}/g)];
 
-    for (const match of matches) {
+    const classMatches = [...content.matchAll(/class(Name)?=["'`]{1}([^"'`]+)["'`]{1}/g)];
+    for (const match of classMatches) {
       const classes = match[2].split(/\s+/);
       for (const cls of classes) usedClasses.add(cls.trim());
+    }
+
+    const ngClassObjMatches = [...content.matchAll(/\[ngClass\]\s*=\s*["'`]{1}\{([^"'`]+)\}["'`]{1}/g)];
+    for (const match of ngClassObjMatches) {
+      const raw = match[1];
+      const classMatches = [...raw.matchAll(/'([^']+)'/g)];
+      for (const classMatch of classMatches) {
+        usedClasses.add(classMatch[1]);
+      }
+    }
+
+    const ngClassArrayMatches = [...content.matchAll(/\[ngClass\]\s*=\s*["'`]{1}\[([^"'`]+)\]["'`]{1}/g)];
+    for (const match of ngClassArrayMatches) {
+      const raw = match[1];
+      const classMatches = [...raw.matchAll(/'([^']+)'/g)];
+      for (const classMatch of classMatches) {
+        usedClasses.add(classMatch[1]);
+      }
+    }
+
+    const attrMatches = [...content.matchAll(/\b\w+\s*=\s*["'`]([^"'`]+)["'`]/g)];
+    for (const match of attrMatches) {
+      const values = match[1].split(/\s+/).map(s => s.trim()).filter(Boolean);
+      for (const val of values) {
+        usedClasses.add(val);
+      }
     }
   }
 
@@ -132,17 +181,26 @@ export async function findUnusedClasses(
     if (isFileIgnored(doc)) continue;
 
     for (const cls of classInstances) {
-      const selectorParts = cls.name.split(','); // split composite
+      const selectorParts = cls.name.split(',');
       const line = cls.range.start.line;
 
       for (const part of selectorParts) {
-        const className = part.replace(/^\./, '').trim();
-        if (!usedClasses.has(className) && !skip.has(className)) {
+        const classNamesInSelector = part
+          .split(/\s+/)
+          .filter(sel => sel.startsWith('.'))
+          .map(sel => stripPseudoSelectorsAndDot(sel))
+          .filter(Boolean);
+
+        const allUnused = classNamesInSelector.every(className =>
+          !usedClasses.has(className) && !skip.has(className)
+        );
+
+        if (allUnused && classNamesInSelector.length > 0) {
           if (isLineIgnored(doc, line)) continue;
 
           const diagnostic = new vscode.Diagnostic(
             cls.range,
-            `Unused class: "${className}"`,
+            `Unused class: "${cls.selector}"`,
             vscode.DiagnosticSeverity.Warning
           );
           diagnostic.source = 'Ultimate CSS';
@@ -163,7 +221,13 @@ export async function findUndefinedClasses(
 ): Promise<Record<string, vscode.Diagnostic[]>> {
   const definedClassParts = new Set<string>();
   for (const classGroup of Object.values(classMap).flat()) {
-    const parts = classGroup.name.split(',').map(s => s.replace(/^\./, '').trim());
+    const parts = classGroup.name
+      .split(',')
+      .flatMap(s =>
+        s.split(/\s+/)
+          .filter(sel => sel.startsWith('.'))
+          .map(sel => stripPseudoSelectorsAndDot(sel))
+      );
     parts.forEach(p => definedClassParts.add(p));
   }
 
@@ -194,10 +258,16 @@ export async function findUndefinedClasses(
         if (isLineIgnored(doc, line)) continue;
 
         for (const className of classList) {
-          if (!definedClassParts.has(className)) {
+          const clean = className.trim();
+
+          const isIgnored = IGNORED_DEFINED_CLASS_PATTERNS.some(p =>
+            typeof p === 'string' ? p === clean : p.test(clean)
+          );
+
+          if (!definedClassParts.has(clean) && !isIgnored) {
             const range = new vscode.Range(
               new vscode.Position(line, col),
-              new vscode.Position(line, col + className.length)
+              new vscode.Position(line, col + clean.length)
             );
 
             if (!diagnosticsByFile[uri.fsPath]) diagnosticsByFile[uri.fsPath] = [];
@@ -205,12 +275,12 @@ export async function findUndefinedClasses(
             diagnosticsByFile[uri.fsPath].push(
               new vscode.Diagnostic(
                 range,
-                `Class "${className}" is not defined in any CSS file. (from Ultimate CSS)`,
+                `Class "${clean}" is not defined in any CSS file. (from Ultimate CSS)`,
                 vscode.DiagnosticSeverity.Warning
               )
             );
           }
-        }
+        }        
       }
     }
   }

@@ -10,6 +10,20 @@ The **Ultimate CSS** extension helps you write cleaner, more efficient styles by
 
 ---
 
+## ⚙️ Settings
+
+Customize how Ultimate CSS analyzes your project by toggling a few helpful settings in the VSCode Settings UI:
+
+![Ultimate CSS settings](images/Ultimate-CSS-Settings.png)
+
+- ✅ **Analyze templates (HTML/JS/TS/JSX/TSX)** – Detects undefined classes in your markup files  
+- ✅ **Analyze duplicate CSS classes** – Flags class names that are defined multiple times across stylesheets  
+- ✅ **Analyze unused CSS classes** – Warns you about styles that are defined but not used anywhere
+
+> You’ll find these options under **“Ultimate CSS”** in your VSCode Settings panel.
+
+---
+
 ## 📸 Screenshots
 
 ### ❌ Duplicate Class Detection

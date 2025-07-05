@@ -22,28 +22,46 @@ const scheduleDiagnosticsUpdate = () => {
 export const updateDiagnostics = async (diagnostics: vscode.DiagnosticCollection) => {
 	console.log('[Ultimate CSS] Running updateDiagnostics...');
 
-	const exclude = '**/{dist,node_modules}/**';
-	const cssFiles = await vscode.workspace.findFiles('**/*.css', exclude);
-	const codeFiles = await vscode.workspace.findFiles('**/*.{html,js,jsx,ts,tsx}', exclude);
+	const config = vscode.workspace.getConfiguration('ultimateCSS');
+	const analyzeCodeTemplates = config.get<boolean>('analyzeCodeTemplates', true);
+	const analyzeCSSDuplicates = config.get<boolean>('analyzeCSSDuplicates', true);
+	const analyzeCSSUnused = config.get<boolean>('analyzeCSSUnused', true);
 
-	console.log(`[Ultimate CSS] Matched ${cssFiles.length} CSS files`);
-	console.log(`[Ultimate CSS] Matched ${codeFiles.length} code files`);
+	console.log('[Ultimate CSS] Settings loaded:', {
+		analyzeCodeTemplates,
+		analyzeCSSDuplicates,
+		analyzeCSSUnused
+	});
+
+	const exclude = '**/{dist,node_modules}/**';
+
+	const cssFiles = await vscode.workspace.findFiles('**/*.{css,scss}', exclude);
+	const codeFiles = analyzeCodeTemplates
+		? await vscode.workspace.findFiles('**/*.{html,js,jsx,ts,tsx}', exclude)
+		: [];
 
 	const classMap = await getAllCSSClasses(cssFiles);
-	console.log('[Ultimate CSS] Found classMap files:', Object.keys(classMap).length);
+	console.log('[Ultimate CSS] CSS class map:', classMap);
 
-	const duplicates = await findDuplicates(classMap);
-	console.log('[Ultimate CSS] Found duplicate classes:', Object.keys(duplicates).length);
+	const duplicates = analyzeCSSDuplicates ? findDuplicates(classMap) : {};
+	console.log('[Ultimate CSS] Duplicate classes found:', duplicates);
 
 	const duplicateClassNames = new Set(
 		Object.values(duplicates).flat().map(d => d.name)
 	);
 
-	const unused = await findUnusedClasses(classMap, codeFiles, duplicateClassNames);
-	console.log('[Ultimate CSS] Found unused class diagnostics for files:', Object.keys(unused).length);
+	let unused: Record<string, vscode.Diagnostic[]> = {};
+	if (analyzeCSSUnused && analyzeCodeTemplates) {
+		unused = await findUnusedClasses(classMap, codeFiles, duplicateClassNames);
+		console.log('[Ultimate CSS] Unused classes found:', unused);
+	} else if (analyzeCSSUnused && !analyzeCodeTemplates) {
+		console.log('[Ultimate CSS] Skipped unused class check because template analysis is disabled.');
+	}
 
-	const undefinedClassDiagnostics = await findUndefinedClasses(classMap, codeFiles);
-	console.log('[Ultimate CSS] Found undefined class diagnostics for files:', Object.keys(undefinedClassDiagnostics).length);
+	const undefinedClassDiagnostics = analyzeCodeTemplates
+		? await findUndefinedClasses(classMap, codeFiles)
+		: [];
+	console.log('[Ultimate CSS] Undefined classes found:', undefinedClassDiagnostics);
 
 	diagnostics.clear();
 	const diagnosticsMap: Record<string, vscode.Diagnostic[]> = {};
@@ -130,6 +148,19 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	vscode.workspace.onDidOpenTextDocument(() => scheduleDiagnosticsUpdate());
 	vscode.workspace.onDidSaveTextDocument(() => scheduleDiagnosticsUpdate());
+
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration(event => {
+			if (
+				event.affectsConfiguration('ultimateCSS.analyzeCodeTemplates') ||
+				event.affectsConfiguration('ultimateCSS.analyzeCSSDuplicates') ||
+				event.affectsConfiguration('ultimateCSS.analyzeCSSUnused')
+			) {
+				console.log('[Ultimate CSS] Configuration changed, updating diagnostics...');
+				scheduleDiagnosticsUpdate();
+			}
+		})
+	);
 
 	context.subscriptions.push(
 		vscode.languages.registerCodeActionsProvider(

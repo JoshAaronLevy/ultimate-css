@@ -1,6 +1,6 @@
 {
   "name": "ultimate-css",
-  "version": "1.2.7",
+  "version": "1.3.7",
   "displayName": "Ultimate CSS",
   "description": "Highlight unused, duplicate, and undefined CSS/SCSS classes across your project.",
   "publisher": "JoshLevy",
@@ -58,7 +58,27 @@
       { "id": "html", "aliases": ["HTML"], "extensions": [".html"] },
       { "id": "css", "aliases": ["CSS"], "extensions": [".css"] },
       { "id": "scss", "aliases": ["SCSS"], "extensions": [".scss"] }
-    ]
+    ],
+    "configuration": {
+      "title": "Ultimate CSS",
+      "properties": {
+        "ultimateCSS.analyzeCodeTemplates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Analyze templates (HTML/JSX/TSX) for undefined classes? (Uncheck if you are getting false positives in your templates)"
+        },
+        "ultimateCSS.analyzeCSSDuplicates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Analyze for duplicate class definitions in CSS?"
+        },
+        "ultimateCSS.analyzeCSSUnused": {
+          "type": "boolean",
+          "default": true,
+          "description": "Analyze for unused CSS classes?"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run build-extension",
